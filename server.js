@@ -22,6 +22,30 @@ var server = http.createServer(function (request, response) {
 
   if (path === '/') {
     let string = fs.readFileSync('./index.html', 'utf8')
+    console.log(request.headers.cookie)
+    let cookies = request.headers.cookie.split('; ')
+    let hash = {}
+    for (let i = 0; i < cookies.length; i++) {
+      let parts = cookies[i].split('=')
+      let key = parts[0]
+      let value = parts[1]
+      hash[key] = value
+    }
+    let email = hash.sign_in_email
+    let users = fs.readFileSync('./db/users', 'utf8')
+    users = JSON.parse(users)
+    let foundUser
+    for (let i = 0; i < users.length; i++) {
+      if (users[i].email === email) {
+        foundUser = users[i]
+        break
+      }
+    }
+    if (foundUser) {
+      string = string.replace('__user__', foundUser.email)
+    } else {
+      string = string.replace('__user__', '请先注册登录')
+    }
     response.statusCode = 200
     response.setHeader('Content-Type', 'text/html;charset=utf-8')
     response.write(string)
@@ -34,13 +58,13 @@ var server = http.createServer(function (request, response) {
     response.end()
   } else if (path === '/sign_up' && method === 'POST') {
     readBody(request).then((body) => {
-      let strings = body.split('&')
+      let strings = body.split('&')  //['email=1', 'password=2', 'password_confirmation=3']
       let hash = {}
       strings.forEach((string) => {
-        let parts = string.split('=')
+        let parts = string.split('=')  //['email', '1']
         let key = parts[0]
         let value = parts[1]
-        hash[key] = value
+        hash[key] = decodeURIComponent(value)
       })
       let {email, password, password_confirmation} = hash
       if (email.indexOf('@') === -1) {
@@ -56,22 +80,66 @@ var server = http.createServer(function (request, response) {
         response.statusCode = 400
         response.write('password is not match')
       } else {
-        response.statusCode = 200
+        let users = fs.readFileSync('./db/users', 'utf8')
+        users = JSON.parse(users)
+
+        let inUse = false
+        for (let i =  0; i < users.length; i++) {
+          if (users[i]['email'] === email) {
+            inUse = true
+          }
+        }
+        if (inUse) {
+          response.statusCode = 400
+          response.write('email is inUse')
+        } else {
+          users.push({
+            "email": email,
+            "password": password
+          })
+          usersStrings = JSON.stringify(users)
+          fs.writeFileSync('./db/users', usersStrings)
+          response.statusCode = 200
+        }
       }
       response.end()
     })
-  } else if (path === '/xxx') {
+  } else if (path === '/sign_in' && method === 'GET') {
+    let string = fs.readFileSync('./sign_in.html', 'utf8')
     response.statusCode = 200
-    response.setHeader('Content-Type', 'text/json;charset=utf-8')
-    response.write(`{
-      "notes": {
-        "to":"小谷",
-        "form":"芳芳",
-        "heading":"打招呼",
-        "content":"hi"
-      }
-    }`)
+    response.setHeader('Content-Type', 'text/html;charset=utf-8')
+    response.write(string)
     response.end()
+  } else if (path === '/sign_in' && method === 'POST') {
+    readBody(request).then((body) => {
+      let strings = body.split('&')  //['email=1', 'password=2']
+      let hash = {}
+      strings.forEach((name) => {
+        let parts = name.split('=')
+        let key = parts[0]
+        let value = parts[1]
+        hash[key] = decodeURIComponent(value)
+      })
+      let {email, password} = hash
+      let users = fs.readFileSync('./db/users', 'utf8')
+      users = JSON.parse(users)
+
+      let found = false
+      for (let i = 0; i < users.length; i++) {
+        if (users[i].email === email && users[i].password === password) {
+          found = true
+          break
+        }
+      }
+      if (found) {
+        response.setHeader('Set-Cookie', `sign_in_email=${email}`)
+        response.statusCode = 200
+      } else {
+        response.statusCode = 401
+        response.write('password is error')
+      }
+      response.end()
+    })
   } else {
     response.statusCode = 404
     response.setHeader('Content-Type', 'text/html;charset=utf-8')
