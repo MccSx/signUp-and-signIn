@@ -152,8 +152,10 @@
     for (let key in hash) {
       if (hash[key] === '') {
         $form.find(`[name=${key}]`).siblings('.error').find('span').addClass('err')
-        return
       }
+    }
+    if (hash['email'] === '' || hash['password'] === '' || hash['password_confirmation'] === '') {
+      return
     }
     if (hash['password'] !== hash['password_confirmation']) {
       let spanTag = $form.find('[name="password_confirmation"]').siblings('.error_confirmation').find('span')
